@@ -11,6 +11,7 @@ import time
 from datetime import datetime
 import os
 import random
+import subprocess
 
 
 
@@ -401,11 +402,48 @@ def scrape_mdpi(topic, years_back, limit):
     print("-" * 50)
     print(f"[✓] Selesai! {len(articles_data)} artikel berhasil disimpan ke '{filepath}'")
 
+    # Opsi: otomatis commit dan push hasil ke Git (jika repo dan remote sudah dikonfigurasi)
+    def git_push(file_path):
+        try:
+            repo_dir = os.path.dirname(os.path.abspath(__file__))
+            rel_path = os.path.relpath(file_path, repo_dir)
+            print(f"[*] Menambahkan '{rel_path}' ke git dan melakukan push...")
+
+            # git add
+            subprocess.run(["git", "add", rel_path], cwd=repo_dir, check=True, capture_output=True)
+
+            # git commit
+            commit_msg = f"Add scraped data: {os.path.basename(file_path)} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+            subprocess.run(["git", "commit", "-m", commit_msg], cwd=repo_dir, check=True, capture_output=True)
+
+            # git push
+            subprocess.run(["git", "push", "origin", "master"], cwd=repo_dir, check=True, capture_output=True)
+
+            print("[✓] Git push berhasil.")
+        except subprocess.CalledProcessError as e:
+            stdout = e.stdout.decode(errors='ignore') if e.stdout else ''
+            stderr = e.stderr.decode(errors='ignore') if e.stderr else ''
+            print(f"[!] Git command failed: {e}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+            print("[!] Periksa konfigurasi remote, credential, atau jalankan git secara manual.")
+        except Exception as e:
+            print(f"[!] Error saat menjalankan git: {e}")
+
+    # Jalankan auto-push jika diinginkan
+    try:
+        # Only attempt to push if this folder is a git repo
+        repo_root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(os.path.abspath(__file__)), capture_output=True, text=True)
+        if repo_root.returncode == 0:
+            git_push(filepath)
+        else:
+            print("[*] Folder ini bukan repository git atau git tidak dikonfigurasi; melewatkan auto-push.")
+    except Exception:
+        print("[*] Git tidak tersedia atau terjadi error saat memeriksa repository; melewatkan auto-push.")
+
 # --- KONFIGURASI PENGGUNAAN ---
 if __name__ == "__main__":
     # Ubah parameter di sini sesuai keinginan
     TOPIK = "computer science"  # Topik pencarian
     TAHUN_KEBELAKANG = 5        # Rentang tahun (misal: 5 tahun terakhir)
-    JUMLAH_AMBIL = 5000         # Jumlah jurnal yang ingin diambil (testing dengan jumlah kecil dulu)
+    JUMLAH_AMBIL = 5         # Jumlah jurnal yang ingin diambil (testing dengan jumlah kecil dulu)
     
     scrape_mdpi(TOPIK, TAHUN_KEBELAKANG, JUMLAH_AMBIL)
