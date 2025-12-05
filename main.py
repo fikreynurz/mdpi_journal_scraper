@@ -224,10 +224,14 @@ def scrape_mdpi(topic, years_back, limit):
     year_from = current_year - years_back
     year_to = current_year
     
+    # Timestamp untuk nama file
+    start_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
     print(f"[*] Memulai scraping MDPI dengan Selenium...")
     print(f"[*] Topik: {topic}")
     print(f"[*] Rentang Tahun: {year_from} - {year_to}")
     print(f"[*] Target Jumlah: {limit} artikel")
+    print(f"[*] Timestamp: {start_timestamp}")
     print("-" * 50)
 
     # Setup WebDriver
@@ -236,8 +240,27 @@ def scrape_mdpi(topic, years_back, limit):
         return
     
     articles_data = []
-
+    
+    # Setup untuk live saving
+    output_dir = "output"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"[*] Folder '{output_dir}' berhasil dibuat.")
+    
+    filename = f"mdpi_{topic.replace(' ', '_')}_{year_from}-{year_to}_{start_timestamp}.json"
+    filepath = os.path.join(output_dir, filename)
+    
+    # Buat file JSON kosong atau baca yang sudah ada
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                articles_data = json.load(f)
+            print(f"[*] Melanjutkan dari {len(articles_data)} artikel yang sudah ada")
+        except:
+            articles_data = []
+    
     page = 1
+    articles_count_for_push = len(articles_data)  # Counter untuk auto-push
     
     try:
         while len(articles_data) < limit:
@@ -365,7 +388,24 @@ def scrape_mdpi(topic, years_back, limit):
                     }
                     
                     articles_data.append(article_data)
-                    print(f"    ✓ [{len(articles_data)}] {title[:60]}...")
+                    
+                    # Live insert: Simpan ke JSON setiap artikel berhasil diambil
+                    try:
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            json.dump(articles_data, f, ensure_ascii=False, indent=4)
+                        print(f"    ✓ [{len(articles_data)}] {title[:60]}... (Tersimpan)")
+                    except Exception as e:
+                        print(f"    ✓ [{len(articles_data)}] {title[:60]}... (Error saving: {e})")
+                    
+                    # Auto-push setiap 50 artikel
+                    articles_count_for_push += 1
+                    if articles_count_for_push % 50 == 0:
+                        print(f"\n[*] Mencapai {articles_count_for_push} artikel - Melakukan auto-push...")
+                        try:
+                            git_push_function(filepath)
+                        except Exception as e:
+                            print(f"[!] Error saat auto-push: {e}")
+                        print()
                     
                 except Exception as e:
                     print(f"    [!] Error parsing artikel: {e}")
@@ -386,24 +426,12 @@ def scrape_mdpi(topic, years_back, limit):
 
  
 
-    # 4. Membuat folder output jika belum ada
-    output_dir = "output"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"[*] Folder '{output_dir}' berhasil dibuat.")
-    
-    # 5. Menyimpan ke JSON di folder output
-    filename = f"mdpi_{topic.replace(' ', '_')}_{year_from}-{year_to}.json"
-    filepath = os.path.join(output_dir, filename)
-    
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(articles_data, f, ensure_ascii=False, indent=4)
-
+    # Final save dan push
     print("-" * 50)
     print(f"[✓] Selesai! {len(articles_data)} artikel berhasil disimpan ke '{filepath}'")
 
-    # Opsi: otomatis commit dan push hasil ke Git (jika repo dan remote sudah dikonfigurasi)
-    def git_push(file_path):
+    # Definisi fungsi git_push untuk digunakan dalam loop
+    def git_push_function(file_path):
         try:
             repo_dir = os.path.dirname(os.path.abspath(__file__))
             rel_path = os.path.relpath(file_path, repo_dir)
@@ -428,22 +456,23 @@ def scrape_mdpi(topic, years_back, limit):
         except Exception as e:
             print(f"[!] Error saat menjalankan git: {e}")
 
-    # Jalankan auto-push jika diinginkan
+    # Final push setelah selesai semua
+    print(f"[*] Melakukan final push untuk {len(articles_data)} artikel...")
     try:
         # Only attempt to push if this folder is a git repo
         repo_root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(os.path.abspath(__file__)), capture_output=True, text=True)
         if repo_root.returncode == 0:
-            git_push(filepath)
+            git_push_function(filepath)
         else:
             print("[*] Folder ini bukan repository git atau git tidak dikonfigurasi; melewatkan auto-push.")
-    except Exception:
-        print("[*] Git tidak tersedia atau terjadi error saat memeriksa repository; melewatkan auto-push.")
+    except Exception as e:
+        print(f"[*] Git tidak tersedia atau terjadi error saat memeriksa repository: {e}")
 
 # --- KONFIGURASI PENGGUNAAN ---
 if __name__ == "__main__":
     # Ubah parameter di sini sesuai keinginan
     TOPIK = "computer science"  # Topik pencarian
     TAHUN_KEBELAKANG = 5        # Rentang tahun (misal: 5 tahun terakhir)
-    JUMLAH_AMBIL = 5         # Jumlah jurnal yang ingin diambil (testing dengan jumlah kecil dulu)
+    JUMLAH_AMBIL = 1000         # Jumlah jurnal yang ingin diambil (testing dengan jumlah kecil dulu)
     
     scrape_mdpi(TOPIK, TAHUN_KEBELAKANG, JUMLAH_AMBIL)
