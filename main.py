@@ -213,6 +213,34 @@ def get_full_article_content(driver, article_url):
             "references": "Error retrieving content"
         }
 
+def git_push_function(file_path):
+    """
+    Fungsi untuk melakukan git add, commit, dan push.
+    """
+    try:
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        rel_path = os.path.relpath(file_path, repo_dir)
+        print(f"[*] Menambahkan '{rel_path}' ke git dan melakukan push...")
+
+        # git add
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+
+        # git commit
+        commit_msg = f"Add scraped data: {os.path.basename(file_path)} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+        subprocess.run(["git", "commit", "-m", commit_msg], cwd=repo_dir, check=True, capture_output=True)
+
+        # git push
+        subprocess.run(["git", "push", "origin", "master"], cwd=repo_dir, check=True, capture_output=True)
+
+        print("[✓] Git push berhasil.")
+    except subprocess.CalledProcessError as e:
+        stdout = e.stdout.decode(errors='ignore') if e.stdout else ''
+        stderr = e.stderr.decode(errors='ignore') if e.stderr else ''
+        print(f"[!] Git command failed: {e}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+        print("[!] Periksa konfigurasi remote, credential, atau jalankan git secara manual.")
+    except Exception as e:
+        print(f"[!] Error saat menjalankan git: {e}")
+
 def scrape_mdpi(topic, years_back, limit):
     """
     Melakukan scraping jurnal MDPI berdasarkan topik dan rentang tahun.
@@ -429,32 +457,6 @@ def scrape_mdpi(topic, years_back, limit):
     # Final save dan push
     print("-" * 50)
     print(f"[✓] Selesai! {len(articles_data)} artikel berhasil disimpan ke '{filepath}'")
-
-    # Definisi fungsi git_push untuk digunakan dalam loop
-    def git_push_function(file_path):
-        try:
-            repo_dir = os.path.dirname(os.path.abspath(__file__))
-            rel_path = os.path.relpath(file_path, repo_dir)
-            print(f"[*] Menambahkan '{rel_path}' ke git dan melakukan push...")
-
-            # git add
-            subprocess.run(["git", "add", rel_path], cwd=repo_dir, check=True, capture_output=True)
-
-            # git commit
-            commit_msg = f"Add scraped data: {os.path.basename(file_path)} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
-            subprocess.run(["git", "commit", "-m", commit_msg], cwd=repo_dir, check=True, capture_output=True)
-
-            # git push
-            subprocess.run(["git", "push", "origin", "master"], cwd=repo_dir, check=True, capture_output=True)
-
-            print("[✓] Git push berhasil.")
-        except subprocess.CalledProcessError as e:
-            stdout = e.stdout.decode(errors='ignore') if e.stdout else ''
-            stderr = e.stderr.decode(errors='ignore') if e.stderr else ''
-            print(f"[!] Git command failed: {e}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
-            print("[!] Periksa konfigurasi remote, credential, atau jalankan git secara manual.")
-        except Exception as e:
-            print(f"[!] Error saat menjalankan git: {e}")
 
     # Final push setelah selesai semua
     print(f"[*] Melakukan final push untuk {len(articles_data)} artikel...")
